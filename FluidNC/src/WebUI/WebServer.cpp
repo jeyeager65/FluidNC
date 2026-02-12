@@ -147,6 +147,7 @@ namespace WebUI {
         _webserver->on("/upload", HTTP_ANY, handle_direct_SDFileList, SDFileUpload);
         //_webserver->on("/SD", HTTP_ANY, handle_SDCARD);
 
+        /*
         if (WiFi.getMode() == WIFI_AP) {
             // if DNSServer is started with "*" for domain name, it will reply with
             // provided IP to all DNS request
@@ -157,6 +158,7 @@ namespace WebUI {
             //do not forget the / at the end
             _webserver->on("/fwlink/", HTTP_ANY, handle_root);
         }
+        */
 
 #if 0
         //SSDP service presentation
@@ -382,10 +384,12 @@ namespace WebUI {
             return;
         }
 
+        /*
         if (WiFi.getMode() == WIFI_AP) {
             sendCaptivePortal();
             return;
         }
+        */
 
         // This lets the user customize the not-found page by
         // putting a "404.htm" file on the local filesystem
