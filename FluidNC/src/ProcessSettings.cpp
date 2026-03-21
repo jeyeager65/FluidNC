@@ -991,6 +991,45 @@ static Error list_parameters(const char* value, AuthenticationLevel auth_level, 
     return Error::Ok;
 }
 
+// Set a named or numbered NGC parameter from outside a running job.
+// Syntax: $Parameters/Set=name=value  (e.g. $PS=myvar=3.5  or  $PS=42=1.0)
+// This command is non-synchronous so it executes immediately during a feed hold.
+static Error set_parameter(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    if (!value || !*value) {
+        return Error::InvalidStatement;
+    }
+    std::string_view sv(value);
+    auto             sep = sv.find('=');
+    if (sep == std::string_view::npos) {
+        return Error::InvalidStatement;
+    }
+    std::string name(sv.substr(0, sep));
+    std::string val_str(sv.substr(sep + 1));
+    float       fval;
+    if (!read_number(val_str, fval)) {
+        return Error::BadNumberFormat;
+    }
+    // Numbered parameter (all-digit name)
+    bool is_numbered = !name.empty();
+    for (char c : name) {
+        if (!isdigit(c)) {
+            is_numbered = false;
+            break;
+        }
+    }
+    if (is_numbered) {
+        uint32_t id = (uint32_t)atoi(name.c_str());
+        if (!set_numbered_param(id, fval)) {
+            return Error::InvalidValue;
+        }
+    } else {
+        if (!set_named_param(name.c_str(), fval)) {
+            return Error::InvalidValue;
+        }
+    }
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1027,7 +1066,8 @@ void make_user_commands() {
     new UserCommand("MI", "Motors/Init", motors_init, notIdleOrAlarm);
 
     new UserCommand("RM", "Macros/Run", macros_run, nullptr);
-    new UserCommand("PL", "Parameters/List", list_parameters, nullptr);
+    new AsyncUserCommand("PL", "Parameters/List", list_parameters, nullptr);
+    new AsyncUserCommand("PS", "Parameters/Set", set_parameter, nullptr);
 
     new UserCommand("H", "Home", home_all, allowConfigStates);
     new UserCommand("HX", "Home/X", home_x, allowConfigStates);

@@ -212,6 +212,22 @@ Channel* AllChannels::poll(char* line) {
     return _lastChannel;
 }
 
+Channel* AllChannels::pollExcept(char* line, Channel* excluded) {
+    _mutex_pollLine.lock();
+    for (auto channel : _channelq) {
+        if (channel != excluded && channel != _lastChannel && channel->pollLine(line) == Error::Ok) {
+            _lastChannel = channel;
+            _mutex_pollLine.unlock();
+            return _lastChannel;
+        }
+    }
+    _mutex_pollLine.unlock();
+    if (_lastChannel && _lastChannel != excluded && _lastChannel->pollLine(line) == Error::Ok) {
+        return _lastChannel;
+    }
+    return nullptr;
+}
+
 AllChannels allChannels;
 
 Channel* pollChannels(char* line) {

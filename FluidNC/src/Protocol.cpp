@@ -1028,6 +1028,23 @@ static void protocol_exec_rt_suspend() {
                 }
             } else {
                 protocol_manage_spindle();
+
+                // During a feed hold with motion stopped, allow $ commands from non-job channels
+                // (e.g. to set parameters that the G-code file can read after resuming).
+                // Uses a reentrancy guard so synchronous commands that call protocol_buffer_synchronize()
+                // do not recursively re-enter this block.
+                static bool          inHoldCmdProcessing = false;
+                static char          holdLine[Channel::maxLine];
+                if (!inHoldCmdProcessing) {
+                    Channel* jobChan  = Job::active() ? Job::channel() : nullptr;
+                    Channel* holdChan = allChannels.pollExcept(holdLine, jobChan);
+                    if (holdChan) {
+                        inHoldCmdProcessing = true;
+                        Error status        = execute_line(holdLine, *holdChan, AuthenticationLevel::LEVEL_GUEST);
+                        holdChan->ack(status);
+                        inHoldCmdProcessing = false;
+                    }
+                }
             }
         }
         protocol_exec_rt_system();

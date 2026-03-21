@@ -54,6 +54,7 @@ public:
 
     Channel* find(const std::string_view name);
     Channel* poll(char* line);
+    Channel* pollExcept(char* line, Channel* excluded);
 };
 
 extern AllChannels allChannels;
