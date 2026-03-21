@@ -16,6 +16,7 @@ class AsyncWebSocket;
 class AsyncWebServer;
 class AsyncWebSocketMessageHandler;
 class AsyncHeaderFreeMiddleware;
+class AsyncCorsMiddleware;
 class AsyncWebServerRequest;
 class AsyncClient;
 
@@ -62,6 +63,7 @@ namespace WebUI {
         static bool                       _setupdone;
         static AsyncWebServer*            _webserver;
         static AsyncHeaderFreeMiddleware* _headerFilter;
+        static AsyncCorsMiddleware*       _corsMiddleware;
         static AsyncWebServer*            _websocketserver;
         static AsyncWebServer*            _websocketserverv3;
         static AsyncWebSocket*            _socket_server;

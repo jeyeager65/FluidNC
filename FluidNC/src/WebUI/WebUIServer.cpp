@@ -65,6 +65,7 @@ namespace WebUI {
     AsyncWebServer*            WebUI_Server::_webserver       = NULL;
     AsyncWebServer*            WebUI_Server::_websocketserver = NULL;
     AsyncHeaderFreeMiddleware* WebUI_Server::_headerFilter    = NULL;
+    AsyncCorsMiddleware*       WebUI_Server::_corsMiddleware  = NULL;
     AsyncWebSocket*            WebUI_Server::_socket_server   = NULL;
     std::string                WebUI_Server::current_session  = "";
 #ifdef ENABLE_AUTHENTICATION
@@ -124,7 +125,14 @@ namespace WebUI {
         _headerFilter->keep("Sec-WebSocket-Protocol");
         _headerFilter->keep("Sec-WebSocket-Extensions");
 
-        _webserver->addMiddlewares({ _headerFilter });
+        _corsMiddleware = new AsyncCorsMiddleware();
+        _corsMiddleware->setOrigin("*");
+        _corsMiddleware->setMethods("*");
+        _corsMiddleware->setHeaders("*");
+        _corsMiddleware->setAllowCredentials(false);
+
+        _webserver->addMiddleware(_headerFilter);
+        _webserver->addMiddleware(_corsMiddleware);
 
         // No metadata on the FLASH filesystem; it consumes too much space
         auto flash_dav = new WebDAV("/flash", LocalFS, true);
@@ -235,6 +243,11 @@ namespace WebUI {
         if (_headerFilter) {
             delete _headerFilter;
             _headerFilter = NULL;
+        }
+
+        if (_corsMiddleware) {
+            delete _corsMiddleware;
+            _corsMiddleware = NULL;
         }
 
 #ifdef ENABLE_AUTHENTICATION
