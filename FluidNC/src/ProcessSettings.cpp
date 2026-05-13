@@ -255,6 +255,7 @@ static Error toggle_check_mode(const char* value, AuthenticationLevel auth_level
     if (state_is(State::CheckMode)) {
         report_feedback_message(Message::Disabled);
         sys.set_abort(true);
+        protocol_send_event(&rtResetEvent);
     } else {
         if (!state_is(State::Idle)) {
             return Error::IdleError;  // Requires no alarm mode.
@@ -297,8 +298,10 @@ static Error msg_to_uart0(const char* value, AuthenticationLevel auth_level, Cha
     return Error::Ok;
 }
 static Error msg_to_uart1(const char* value, AuthenticationLevel auth_level, Channel& out) {
-    if (value && config->_uart_channels[1]) {
+    if (value && config->_uart_channels[1] && config->_uart_channels[1]->uart() && config->_uart_channels[1]->uart()->configured()) {
         log_msg_to(*(config->_uart_channels[1]), value);
+    } else if (value) {
+        log_error_to(out, "uart_channel1 is not configured");
     }
     return Error::Ok;
 }
@@ -646,7 +649,7 @@ static Error motor_control(const char* value, bool disable) {
     }
     if (!value || *value == '\0') {
         log_info((disable ? "Dis" : "En") << "abling all motors");
-        Axes::set_disable(disable);
+        Axes::set_disable(disable, true);
         return Error::Ok;
     }
 
@@ -662,7 +665,11 @@ static Error motor_control(const char* value, bool disable) {
         return Error::InvalidValue;
     }
     log_info((disable ? "Dis" : "En") << "abling " << value << " motors");
-    axes->set_disable(axis, disable);
+
+    if (axis == INVALID_AXIS || axis >= axes->_numberAxis || axes->_axis[axis] == nullptr) {
+        return Error::InvalidValue;
+    }
+    axes->set_disable(axis, disable, true);
     return Error::Ok;
 }
 static Error motor_disable(const char* value, AuthenticationLevel auth_level, Channel& out) {
@@ -833,6 +840,11 @@ static Error uartPassthrough(const char* value, AuthenticationLevel auth_level, 
             log_error_to(out, uart_name << " does not exist");
             return Error::InvalidValue;
         }
+    }
+
+    if (!downstream_uart || !downstream_uart->configured()) {
+        log_error_to(out, "Selected UART is not configured");
+        return Error::InvalidValue;
     }
 
     out.pause();  // Stop input polling on the upstream channel
