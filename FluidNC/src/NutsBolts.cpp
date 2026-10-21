@@ -11,14 +11,28 @@
 #include <cmath>
 #include <cstdio>
 #include <string_view>
+#ifdef __EMSCRIPTEN__
+#    include <atomic>
+#    include <chrono>
+#    include <thread>
+#endif
 
 uint32_t get_ms() {
     return xTaskGetTickCount() * (1000 / configTICK_RATE_HZ);
 }
 
+#ifdef __EMSCRIPTEN__
+// the wasm build's time scale (capture/StepTimer.cpp): homing settle, dwell (G4) and the other machine delays
+// shrink with the stepping
+double time_scale_now();
+void delay_ms(uint32_t ms) {
+    std::this_thread::sleep_for(std::chrono::microseconds(int64_t(ms * 1000.0 / time_scale_now())));
+}
+#else
 void delay_ms(uint32_t ms) {
     vTaskDelay(ms / portTICK_PERIOD_MS);
 }
+#endif
 
 // Non-blocking delay function used for general operation and suspend features.
 bool dwell_ms(uint32_t milliseconds, DwellMode mode) {

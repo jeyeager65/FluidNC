@@ -7,9 +7,20 @@
 #include "Protocol.h"
 #include "Driver/fluidnc_gpio.h"
 
-void gpio_write(pinnum_t pin, bool value) {}
+#include <atomic>
+
+// Virtual pin levels and a write hook, for the wasm build's simulated switches (wasm/VirtualPins.cpp sets both).
+// Elsewhere they stay 0 / null, so the pins read low and writes go nowhere, as before.
+std::atomic<uint64_t> g_virtual_gpios { 0 };
+void (*g_gpio_write_hook)(pinnum_t pin, bool value) = nullptr;
+
+void gpio_write(pinnum_t pin, bool value) {
+    if (g_gpio_write_hook) {
+        g_gpio_write_hook(pin, value);
+    }
+}
 bool gpio_read(pinnum_t pin) {
-    return 0;
+    return (g_virtual_gpios.load() >> pin) & 1;
 }
 void gpio_mode(pinnum_t pin, bool input, bool output, bool pullup, bool pulldown, bool opendrain) {}
 void gpio_drive_strength(pinnum_t pin, uint8_t strength) {}
@@ -35,7 +46,7 @@ static int32_t gpio_deltat_ticks[MAX_N_GPIO + 1]     = { 0 };
 static void gpio_set_rate_limit(int32_t gpio_num, uint32_t ms) {}
 
 static inline gpio_mask_t get_gpios() {
-    return ((uint64_t(0) << 32) | 0) ^ gpios_inverted;
+    return g_virtual_gpios.load() ^ gpios_inverted;
 }
 static gpio_mask_t gpio_mask(int32_t gpio_num) {
     return 1ULL << gpio_num;
@@ -87,6 +98,14 @@ void gpio_rearm(int32_t gpio_num) {
 }
 
 static void gpio_send_event(int32_t gpio_num, bool active) {
+#ifdef __EMSCRIPTEN__
+    // the simulated switches change in the step loop; poll_gpios() (Serial's polling loop) sends the events
+    auto arg = gpioArgs[gpio_num];
+    if (arg) {
+        protocol_send_event_from_ISR(active ? &pinActiveEvent : &pinInactiveEvent, arg);
+    }
+    gpios_update(gpios_current, gpio_num, active);
+#endif
 #if 0
     auto    end_ticks  = gpio_next_event_ticks[gpio_num];
     int32_t this_ticks = int32_t(xTaskGetTickCount());

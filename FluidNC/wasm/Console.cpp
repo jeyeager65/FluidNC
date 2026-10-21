@@ -20,7 +20,9 @@
 #include <emscripten.h>
 #include <cstring>
 #include <deque>
+#include <atomic>
 #include <mutex>
+#include <string>
 
 #include "Channel.h"
 #include "Serial.h"  // allChannels
@@ -32,7 +34,38 @@
 // plain EM_JS/EM_ASM there would silently write to the wrong `self` and
 // never reach the page. MAIN_THREAD_EM_ASM proxies the call to actually run
 // on the main thread regardless of which pthread it's invoked from.
+//
+// Queued mode (fluidnc_output_queue(1), lr4-sandbox's page): write() only appends to a buffer and the page takes it
+// with fluidnc_take_output() on its own timer - MAIN_THREAD_EM_ASM waits for the page's main thread, so a busy page
+// (drawing a frame) would stall FluidNC's main loop, the step segment buffer would run dry and a homing approach would
+// stop short (cycle stop = "Homing Fail Approach"), worst at a high time scale.
+namespace {
+    std::atomic<bool> output_queued { false };
+    std::mutex        output_mutex;
+    std::string       output_pending, output_taken;
+}
+
+extern "C" {
+EMSCRIPTEN_KEEPALIVE
+void fluidnc_output_queue(int on) {
+    output_queued.store(on != 0);
+}
+// everything written since the last call (UTF-8, NUL-terminated; valid until the next call)
+EMSCRIPTEN_KEEPALIVE
+const char* fluidnc_take_output() {
+    std::lock_guard<std::mutex> lock(output_mutex);
+    output_taken.clear();
+    output_taken.swap(output_pending);
+    return output_taken.c_str();
+}
+}
+
 void wasm_console_write(const char* buf, int len) {
+    if (output_queued.load()) {
+        std::lock_guard<std::mutex> lock(output_mutex);
+        output_pending.append(buf, len);
+        return;
+    }
     MAIN_THREAD_EM_ASM(
         {
             const text = UTF8ToString($0, $1);

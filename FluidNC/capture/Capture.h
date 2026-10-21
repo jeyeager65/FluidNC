@@ -9,6 +9,10 @@
 #include <atomic>
 #include <mutex>
 
+#ifdef __EMSCRIPTEN__
+double time_scale_now();
+#endif
+
 // Capture here defines everything that we want to know. Specifically, we want to capture per ID:
 // 1. Timings. *When* did something happen?
 // 2. Data. This can be a simple '1' or '0', or a character stream. For simplicity, we store a vector of integers.
@@ -81,7 +85,13 @@ public:
 
     void wait(uint32_t delay) {
         // Actually wait in real time (delay is in milliseconds)
+#ifdef __EMSCRIPTEN__
+        // ...divided by the wasm build's time scale (capture/StepTimer.cpp): FluidNC's loops (vTaskDelay) keep pace
+        // with the stepping, so the step segment buffer is refilled in machine time
+        std::this_thread::sleep_for(std::chrono::microseconds(int64_t(delay * 1000.0 / time_scale_now())));
+#else
         std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+#endif
         currentTime.fetch_add(delay, std::memory_order_relaxed);
     }
 
