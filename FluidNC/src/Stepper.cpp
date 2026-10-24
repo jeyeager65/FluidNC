@@ -233,6 +233,14 @@ bool IRAM_ATTR Stepper::pulse_func() {
                 spindle_isr_speed_fn(spindle, st.exec_segment->spindle_dev_speed);
             }
         } else {
+#ifdef __EMSCRIPTEN__
+            // The browser simulator: its step thread can run ahead of the foreground's segment prep (a stall at a time
+            // scale above 1x); hardware never does. A move still being prepared isn't over, so wait for its next
+            // segment instead of stopping - homing would take that cycle stop for ALARM 9 (Homing Fail Approach).
+            if (!sys.step_control.endMotion && (pl_block != NULL || plan_get_current_block() != NULL)) {
+                return true;
+            }
+#endif
             // Segment buffer empty. Shutdown.
             stop_stepping();
             if (!state_is(State::Jog)) {  // added to prevent ... jog after probing crash
